@@ -1,18 +1,27 @@
-﻿using Microsoft.AspNetCore.Http.Extensions;
+﻿using Cerberus.Host.ClientDiscovery;
+using Microsoft.AspNetCore.Http.Extensions;
 
 namespace Cerberus.Host.RateLimitting;
 
-public sealed class RateLimiterMiddleware : IMiddleware
+internal sealed class RateLimiterMiddleware
 {
+    private readonly RequestDelegate _next;
     private readonly ILogger<RateLimiterMiddleware> _logger;
 
-    public RateLimiterMiddleware(ILogger<RateLimiterMiddleware> logger)
+    public RateLimiterMiddleware(RequestDelegate next,
+        ILogger<RateLimiterMiddleware> logger)
     {
+        _next = next;
         _logger = logger;
     }
-    public Task InvokeAsync(HttpContext context, RequestDelegate next)
+    public async Task InvokeAsync(HttpContext context, IClientRetriever clientRetriever)
     {
-        _logger.RequestRecieved(context.Request.GetEncodedPathAndQuery());
-        return next.Invoke(context);
+        var client = await clientRetriever
+            .GetAsync(context, CancellationToken.None)
+            .ConfigureAwait(false);
+
+        _logger.RequestRecieved(context.Request.GetEncodedPathAndQuery(), client!);
+
+        await _next.Invoke(context).ConfigureAwait(false);
     }
 }
